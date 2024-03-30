@@ -1,0 +1,3 @@
+[submodule "QuBLAS"]
+	path = QuBLAS
+	url = https://github.com/autohdw/QuBLAS.git
