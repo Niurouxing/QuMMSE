@@ -6,9 +6,12 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
 
 add_subdirectory(QuBLAS)
+
+# include .h files in ./include directory
+include_directories(include)
 
 add_executable(QuMMSE main.cpp)
 
