@@ -5,81 +5,9 @@
 #include "config.h"
 #include "utils.h"
 
-inline void GETRF(std::vector<std::vector<double>> &A, std::vector<int> &pivot)
-{
-    int n = A.size();
-
-    pivot.resize(n, 0);
-
-    for (int i = 0; i < n; ++i)
-        pivot[i] = i;
-
-    for (int k = 0; k < n; ++k)
-    {
-        double max = 0.0;
-        int i_max = k;
-
-        for (int i = k; i < n; ++i)
-        {
-            if (std::abs(A[i][k]) > max)
-            {
-                max = std::abs(A[i][k]);
-                i_max = i;
-            }
-        }
-
-        if (max == 0.0)
-        {
-            std::cerr << "Matrix is singular!" << std::endl;
-            return;
-        }
-
-        std::swap(A[k], A[i_max]);
-        std::swap(pivot[k], pivot[i_max]);
-
-        for (int i = k + 1; i < n; ++i)
-        {
-            A[i][k] /= A[k][k];
-            for (int j = k + 1; j < n; ++j)
-            {
-                A[i][j] -= A[i][k] * A[k][j];
-            }
-        }
-    }
-}
-
-inline void GETRS(std::vector<std::vector<double>> &A, std::vector<int> &pivot, std::vector<double> &b)
-{
-    int n = A.size();
-    std::vector<double> b_permuted(n);
-
-    for (int i = 0; i < n; ++i)
-    {
-        b_permuted[i] = b[pivot[i]];
-    }
-
-    for (int i = 0; i < n; ++i)
-    {
-        for (int j = 0; j < i; ++j)
-        {
-            b_permuted[i] -= A[i][j] * b_permuted[j];
-        }
-    }
-
-    for (int i = n - 1; i >= 0; --i)
-    {
-        for (int j = i + 1; j < n; ++j)
-        {
-            b_permuted[i] -= A[i][j] * b_permuted[j];
-        }
-        b_permuted[i] /= A[i][i];
-    }
-
-    for (int i = 0; i < n; ++i)
-    {
-        b[i] = b_permuted[i];
-    }
-}
+static constexpr int TxAntNum = 4;
+static constexpr int RxAntNum = 8;
+static constexpr int ModType = 4;
 
 class MMSE
 {
@@ -96,6 +24,8 @@ public:
     std::array<double, RxAntNum * 2> RxSymbolsNoQuant;
     std::array<std::array<double, TxAntNum * 2>, RxAntNum * 2> HNoQuant;
     std::array<size_t, TxAntNum * 2> pivot;
+
+    std::array<int, TxAntNum * ModType> info;
 
     MMSE() = default;
 
@@ -174,8 +104,6 @@ public:
 
         Qgemv<QgemvAddArgs<QgemvAdd_t>, QgemvMulArgs<QgemvMul_t>, QgemvTransposedA<true>>(HtY, H, RxSymbols);
 
- 
-
         for (int i = 0; i < 2 * TxAntNum; i++)
         {
             HtH[i][i] = HtH[i][i] + Nv;
@@ -189,6 +117,56 @@ public:
                QgetrsSubArgs<QgetrsSub_t>,
                QgetrsMulArgs<QgetrsMul_t>>(HtH, pivot, HtY);
 
-        HtY.display("result");
+        auto res = HtY.output();
+        for (int i = 0; i < 2 * TxAntNum; i++)
+        {
+            for (int j = 0; j < ModType / 2; j++)
+            {
+                int index = 0;
+                double minDist = 1e9;
+                const double* realConsMod = nullptr;
+                const int* realBitConsMod = nullptr;
+
+                if constexpr (ModType == 2)
+                {
+                    realConsMod = realConsMod2;
+                    realBitConsMod = realBitConsMod2;
+                }
+                else if constexpr (ModType == 4)
+                {
+                    realConsMod = realConsMod4;
+                    realBitConsMod = realBitConsMod4;
+                }
+                else if constexpr (ModType == 6)
+                {
+                    realConsMod = realConsMod6;
+                    realBitConsMod = realBitConsMod6;
+                }
+                else if constexpr (ModType == 8)
+                {
+                    realConsMod = realConsMod8;
+                    realBitConsMod = realBitConsMod8;
+                }
+                else
+                {
+                    throw std::runtime_error("ModType not supported");
+                }
+
+                for (int k = 0; k < ModType / 2; k++)
+                {
+                    double dist = std::abs(res[i] - realConsMod[k]);
+                    if (dist < minDist)
+                    {
+                        minDist = dist;
+                        index = k;
+                    }
+                }
+
+                for (int k = 0; k < ModType / 2; k++)
+                {
+                    info[i * ModType / 2 + k] = realBitConsMod[index * ModType / 2 + k];
+                }
+            }
+        }
     }
 };

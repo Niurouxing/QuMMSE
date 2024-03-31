@@ -1,25 +1,42 @@
 #include <iostream>
+#include <cstdlib>
 
+#include "MMSE.h"
 #include "QuBLAS.h"
 #include "utils.h"
-#include "MMSE.h"
 
-
-int main()
+int main(int argc, char *argv[])
 {
-    MMSE mmse;
-
-    int temp[TxAntNum * ModType];
-
-    for (int i = 0; i < TxAntNum * ModType; i++)
-    {
-        temp[i] = i % 2;
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <iter> <SNRdB>" << std::endl;
+        return 1;
     }
 
-    mmse.run(temp,30);
-    
+    int iter = std::atoi(argv[1]);
+    double SNRdB = std::atof(argv[2]);
 
+    MMSE mmse;
+    int error = 0;  
+    for (int loop = 0; loop < iter; loop++)
+    {
+        int info[TxAntNum * ModType];
 
+        for (int i = 0; i < TxAntNum * ModType; i++)
+        {
+            info[i] = rand() % 2;
+        }
 
+        mmse.run(info, SNRdB);
 
+        for (int i = 0; i < TxAntNum * ModType; i++)
+        {
+            if (mmse.info[i] != info[i])
+            {
+                error++;
+            }
+        }
+    }
+
+    std::cout <<error << std::endl;
+    return 0;
 }
