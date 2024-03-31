@@ -11,16 +11,14 @@ from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.operators.crossover.sbx import SBX
 from pymoo.operators.repair.rounding import RoundingRepair
 from pymoo.operators.mutation.pm import PM
-# tqdm
-from tqdm import tqdm
 
 def update_config(numbers):
     """
     仅在原地更新./include中的config.h文件。
     """
     config_file_path = "./include/config.h"  # 定义config.h的路径
-    if len(numbers) != 30:
-        print("Error: Expected 30 numbers.")
+    if len(numbers) != 32:
+        print("Error: Expected 32 numbers.")
         return
     
     with open(config_file_path, "r") as file:
@@ -43,20 +41,15 @@ def update_config(numbers):
     with open(config_file_path, "w") as file:
         file.write(updated_content)
 
-def build_cmake_project(build_dir, silence_output=True):
+def build_cmake_project(build_dir):
     """
     在指定的构建目录中重新编译项目。
     """
     try:
         os.makedirs(build_dir, exist_ok=True)
-        # 将输出重定向到subprocess.DEVNULL，以避免在命令行中显示
-        if silence_output:
-            subprocess.check_call(["cmake", "-S.", "-B", build_dir, "-DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++", "-DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.check_call(["cmake", "--build", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            subprocess.check_call(["cmake", "-S.", "-B", build_dir, "-DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++", "-DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang"])
-        subprocess.check_call(["cmake", "--build", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        # print(f"CMake project built successfully in {build_dir}.")
+        subprocess.check_call(["cmake", "-S.", "-B", build_dir, "-DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++", "-DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang"])
+        subprocess.check_call(["cmake", "--build", build_dir])
+        print(f"CMake project built successfully in {build_dir}.")
     except subprocess.CalledProcessError as e:
         print(f"Failed to build CMake project in {build_dir}: {e}")
 
@@ -99,10 +92,10 @@ def parallel_execution(build_directories, iter, SNRdB):
 class myProblem(Problem):
     def __init__(self):
         super().__init__(
-            n_var= 30,
+            n_var= 32,
             n_obj=1,
             n_constr=1,
-            xl=3, 
+            xl=0, 
             xu=12,
             vtype=int,
         )
@@ -111,32 +104,23 @@ class myProblem(Problem):
     def _evaluate(self, x, out, *args, **kwargs):
         pop_size = x.shape[0]
         f = np.zeros((pop_size, 1))
-        g = np.zeros((pop_size, 1))
 
-        # x is np.array(pop_size, 30)
+        # x is np.array(pop_size, 32)
 
         # clear build directories
         build_directories = []
         
         # compile for each row of x
-        for i in tqdm(range(pop_size), desc="Building projects"):
+        for i in range(pop_size):
             build_dir = process_config_and_build(x[i], i)
             build_directories.append(build_dir)
-
-        # clear the last line of console, which is the progress bar
-        print("\033[F\033[K", end="")
-  
 
         # run the compiled programs in parallel
         results = parallel_execution(build_directories, 1000, 10)
 
     
         for i in range(pop_size):
-            g[i]= results[i]-1300
-            f[i] = np.sum(x[i])
-        
-        out["F"] = f
-        out["G"] = g
+            out["F"][i] = results[i]
 
     def __del__(self):
         # 在对象被销毁时关闭进程池
@@ -160,7 +144,7 @@ class MyCallback(Callback):
             minIndex = np.argmin(currentPer)
             minErrorBits = currentPer[minIndex]
             minArg = currentArg[minIndex]
-            print("Best :", minErrorBits)
+            print("minErrorBits:", minErrorBits)
             print("minArg:", minArg)
 
 
@@ -169,10 +153,10 @@ if __name__ == "__main__":
     myPro = myProblem()
     print("The problem has been initialized!")
 
-    pop_size = 8
+    pop_size = 32
     n_gen = 1000
 
-    good_init = np.random.randint(9, 12, (pop_size, 30))
+    good_init = [10] * 32
 
     algorithm = NSGA2(
         pop_size=pop_size,

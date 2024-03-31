@@ -1,5 +1,5 @@
-#include <iostream>
 #include <cstdlib>
+#include <iostream>
 
 #include "MMSE.h"
 #include "QuBLAS.h"
@@ -7,16 +7,15 @@
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <iter> <SNRdB>" << std::endl;
-        return 1;
+    int iter = 10000;
+    double SNRdB = 10;
+    if (argc >= 3)
+    {
+        iter = std::atoi(argv[1]);
+        SNRdB = std::atof(argv[2]);
     }
-
-    int iter = std::atoi(argv[1]);
-    double SNRdB = std::atof(argv[2]);
-
     MMSE mmse;
-    int error = 0;  
+    int error = 0;
     for (int loop = 0; loop < iter; loop++)
     {
         int info[TxAntNum * ModType];
@@ -37,6 +36,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    std::cout <<error << std::endl;
+    std::cout << error << std::endl;
     return 0;
 }

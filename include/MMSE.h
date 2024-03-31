@@ -12,7 +12,6 @@ static constexpr int ModType = 4;
 class MMSE
 {
 public:
-    apFixedVec<TxSymbol_t, 2 * TxAntNum> TxSymbols;
     apFixedVec<RxSymbol_t, 2 * RxAntNum> RxSymbols;
     apFixedMat<H_t, 2 * RxAntNum, 2 * TxAntNum> H;
     Nv_t Nv;
@@ -33,10 +32,13 @@ public:
     {
         static double NvNoQuant = TxAntNum * RxAntNum / (std::pow(10, SNRdB / 10) * ModType * TxAntNum);
         Nv = NvNoQuant;
+        int ConSize = 1 << (ModType / 2);
+        int bitLength = ModType / 2;
         for (int i = 0; i < TxAntNum * 2; i++)
         {
             // each symbol contains Modtype/2 bits, read the bits to get the index
             int index = 0;
+
             for (int j = 0; j < ModType / 2; j++)
             {
                 index = index * 2 + infoBits[i * ModType / 2 + j];
@@ -62,8 +64,9 @@ public:
                 // static_assert(false, "ModType not supported");
                 throw std::runtime_error("ModType not supported");
             }
-            TxSymbols[i] = TxSymbolsNoQuant[i];
         }
+
+
 
         // generate H
         double randomTemp;
@@ -118,54 +121,55 @@ public:
                QgetrsMulArgs<QgetrsMul_t>>(HtH, pivot, HtY);
 
         auto res = HtY.output();
-        for (int i = 0; i < 2 * TxAntNum; i++)
+
+
+        const double *Cons;
+        const int *bitCons;
+        if constexpr (ModType == 2)
         {
-            for (int j = 0; j < ModType / 2; j++)
+            Cons = realConsMod2;
+            bitCons = realBitConsMod2;
+        }
+        else if constexpr (ModType == 4)
+        {
+            Cons = realConsMod4;
+            bitCons = realBitConsMod4;
+        }
+        else if constexpr (ModType == 6)
+        {
+            Cons = realConsMod6;
+            bitCons = realBitConsMod6;
+        }
+        else if constexpr (ModType == 8)
+        {
+            Cons = realConsMod8;
+            bitCons = realBitConsMod8;
+        }
+        else
+        {
+            // static_assert(false, "ModType not supported");
+            throw std::runtime_error("ModType not supported");
+        }
+        for (int i = 0; i < TxAntNum * 2; i++)
+        {
+            double minDistance = 100000000;
+            int minIndex = 0;
+
+            for (int j = 0; j < ConSize; j++)
             {
-                int index = 0;
-                double minDist = 1e9;
-                const double* realConsMod = nullptr;
-                const int* realBitConsMod = nullptr;
+                double distance = 0;
+                distance = std::abs(res[i] - Cons[j]);
 
-                if constexpr (ModType == 2)
+                if (distance < minDistance)
                 {
-                    realConsMod = realConsMod2;
-                    realBitConsMod = realBitConsMod2;
+                    minDistance = distance;
+                    minIndex = j;
                 }
-                else if constexpr (ModType == 4)
-                {
-                    realConsMod = realConsMod4;
-                    realBitConsMod = realBitConsMod4;
-                }
-                else if constexpr (ModType == 6)
-                {
-                    realConsMod = realConsMod6;
-                    realBitConsMod = realBitConsMod6;
-                }
-                else if constexpr (ModType == 8)
-                {
-                    realConsMod = realConsMod8;
-                    realBitConsMod = realBitConsMod8;
-                }
-                else
-                {
-                    throw std::runtime_error("ModType not supported");
-                }
+            }
 
-                for (int k = 0; k < ModType / 2; k++)
-                {
-                    double dist = std::abs(res[i] - realConsMod[k]);
-                    if (dist < minDist)
-                    {
-                        minDist = dist;
-                        index = k;
-                    }
-                }
-
-                for (int k = 0; k < ModType / 2; k++)
-                {
-                    info[i * ModType / 2 + k] = realBitConsMod[index * ModType / 2 + k];
-                }
+            for (int j = 0; j < bitLength; j++)
+            {
+                this->info[i * bitLength + j] = bitCons[minIndex * bitLength + j];
             }
         }
     }
