@@ -5,8 +5,8 @@
 #include "config.h"
 #include "utils.h"
 
-static constexpr int TxAntNum = 4;
-static constexpr int RxAntNum = 8;
+static constexpr int TxAntNum = 16;
+static constexpr int RxAntNum = 32;
 static constexpr int ModType = 4;
 
 class MMSE

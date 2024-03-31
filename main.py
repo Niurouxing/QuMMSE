@@ -1,94 +1,94 @@
 import subprocess
 import os
 import re
+import shutil
+from multiprocessing import Pool
 
 def update_config(numbers):
-    # 确保提供的数值列表长度正确
+    """
+    仅在原地更新./include中的config.h文件。
+    """
+    config_file_path = "./include/config.h"  # 定义config.h的路径
     if len(numbers) != 32:
         print("Error: Expected 32 numbers.")
         return
-
-    # 读取原始文件内容
-    with open("./include/config.h", "r") as file:
+    
+    with open(config_file_path, "r") as file:
         content = file.read()
-
-    # 定义一个正则表达式，同时匹配intBits和fracBits内的数字
+    
     pattern = r"(intBits<|fracBits<)(\d+)>"
-
-    # 用于记录当前替换的位置
     current_index = 0
-
-    # 定义一个替换函数，每次匹配到数字时被调用
+    
     def replace_with_number(match):
         nonlocal current_index
-        # 提取当前的数字对应的替换值
         replacement_number = numbers[current_index]
         current_index += 1
-        # 返回替换文本
         return f"{match.group(1)}{replacement_number}>"
-
-    # 使用正则表达式和替换函数更新文件内容
+    
     updated_content = re.sub(pattern, replace_with_number, content)
-
-    # 确保我们替换了所有的32个数字
+    
     if current_index != len(numbers):
         print("Warning: Not all numbers were replaced.")
-
-    # 写回修改后的内容
-    with open("./include/config.h", "w") as file:
+        
+    with open(config_file_path, "w") as file:
         file.write(updated_content)
 
-def build_cmake_project(build_dir="./build"):
+def build_cmake_project(build_dir):
     """
-    使用CMake编译C++项目。
-    假设CMakeLists.txt位于项目的根目录。
-    参数:
-    - build_dir: 构建目录的路径
+    在指定的构建目录中重新编译项目。
     """
     try:
-        # 如果构建目录不存在，创建它
         os.makedirs(build_dir, exist_ok=True)
-        # 切换到构建目录
-        os.chdir(build_dir)
-        # 调用CMake和make来编译项目
-        subprocess.check_call(["cmake", ".."])
-        subprocess.check_call(["cmake", "--build", "."])
-        print("CMake project built successfully.")
+        subprocess.check_call(["cmake", "-S.", "-B", build_dir, "-DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++", "-DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang"])
+        subprocess.check_call(["cmake", "--build", build_dir])
+        print(f"CMake project built successfully in {build_dir}.")
     except subprocess.CalledProcessError as e:
-        print(f"Failed to build CMake project: {e}")
-    finally:
-        # 切换回原始目录
-        os.chdir("..")
+        print(f"Failed to build CMake project in {build_dir}: {e}")
 
 def run_cpp_program(executable_path, iter, SNRdB):
     """
-    执行C++程序并获取输出结果。
-    参数:
-    - executable_path: 可执行文件的路径
-    - iter: 迭代次数
-    - SNRdB: SNRdB值
+    运行C++程序并获取输出结果。
     """
-    iter_str = str(iter)
-    SNRdB_str = str(SNRdB)
-    
+    iter_str, SNRdB_str = str(iter), str(SNRdB)
     result = subprocess.run([executable_path, iter_str, SNRdB_str], capture_output=True, text=True)
     
     if result.returncode != 0:
-        print("Error running the C++ program:", result.stderr)
+        print(f"Error running the C++ program in {executable_path}: {result.stderr}")
         return None
     
-    error = int(result.stdout.strip())
-    return error
+    return int(result.stdout.strip())
 
-numbers_to_replace = [11] * 32  # 假设你想把所有数字都替换为12，示例使用
-update_config(numbers_to_replace)
+def process_config_and_build(numbers, build_dir_index):
+    """
+    更新config.h文件，并为每组数字构建项目，输出到一个独立的build文件夹。
+    """
+    build_dir = f"./build/build_{build_dir_index}"  # 为每次构建创建独立的构建目录
+    update_config(numbers)  # 更新config.h
+    build_cmake_project(build_dir)  # 构建项目
+    return build_dir
 
-# 重新编译CMake项目
-build_cmake_project()
+def parallel_execution(build_directories, iter, SNRdB):
+    """
+    并行运行所有构建好的C++程序。
+    """
+    executable_paths = [os.path.join(dir, "QuMMSE") for dir in build_directories]  # 替换your_executable_name
+    with Pool(processes=len(executable_paths)) as pool:
+        tasks = [(path, iter, SNRdB) for path in executable_paths]
+        results = pool.starmap(run_cpp_program, tasks)
+    return results
 
-# 运行C++程序
-executable_path = "./build/QuMMSE"  # 请根据实际情况修改路径
-iter = 100
-SNRdB = 10
-error = run_cpp_program(executable_path, iter, SNRdB)
-print(f"Error: {error}")
+if __name__ == "__main__":
+    number_sets = [[2*i+5] * 32 for i in range(3)]  
+    build_directories = []
+
+    for index, numbers in enumerate(number_sets):
+        build_dir = process_config_and_build(numbers, index)
+        build_directories.append(build_dir)
+    
+    # 替换iter和SNRdB为你需要的值
+    iter_value = 1000
+    SNRdB_value = 10
+    results = parallel_execution(build_directories, iter_value, SNRdB_value)
+    
+    for result in results:
+        print(f"Error: {result}")
