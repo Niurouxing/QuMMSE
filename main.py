@@ -14,11 +14,42 @@ from pymoo.operators.mutation.pm import PM
 # tqdm
 from tqdm import tqdm
 
-def update_config(numbers):
+
+
+
+
+
+
+
+
+def create_cmake_projects_copies(num_copies):
+    # delete the existing subCMake directory if it exists
+    shutil.rmtree('./subCMake', ignore_errors=True)
+
+    source_folders = ['./include', './QuBLAS', './main.cpp', './CMakeLists.txt']
+    base_target_folder = './subCMake'
+
+    for i in range(num_copies):
+        target_folder = f'{base_target_folder}/subCMake_{i}'
+        
+        # Create directory structure
+        os.makedirs(target_folder, exist_ok=True)
+        for folder in source_folders:
+            dest = os.path.join(target_folder, os.path.basename(folder))
+            if os.path.isdir(folder):
+                shutil.copytree(folder, dest, dirs_exist_ok=True)
+            else:  # For files
+                shutil.copy(folder, dest)
+                
+    print(f"Created {num_copies} CMake project copies in '{base_target_folder}'.")
+
+
+
+def update_config(numbers, build_dir_index):
     """
     仅在原地更新./include中的config.h文件。
     """
-    config_file_path = "./include/config.h"  # 定义config.h的路径
+    config_file_path = f"./subCMake/subCMake_{build_dir_index}/include/config.h"
     if len(numbers) != 30:
         print("Error: Expected 30 numbers.")
         return
@@ -43,19 +74,18 @@ def update_config(numbers):
     with open(config_file_path, "w") as file:
         file.write(updated_content)
 
-def build_cmake_project(build_dir, silence_output=True):
-    """
-    在指定的构建目录中重新编译项目。
-    """
+def build_cmake_project(build_dir_index, silence_output=True):
+    build_dir = f"./build/build_{build_dir_index}"
+    source_dir = f"./subCMake/subCMake_{build_dir_index}"
+    os.makedirs(build_dir, exist_ok=True)
     try:
-        os.makedirs(build_dir, exist_ok=True)
-        # 将输出重定向到subprocess.DEVNULL，以避免在命令行中显示
+        # 注意这里的改变，我们现在使用`source_dir`作为源目录
         if silence_output:
-            subprocess.check_call(["cmake", "-S.", "-B", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call(["cmake", "-S", source_dir, "-B", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.check_call(["cmake", "--build", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            subprocess.check_call(["cmake", "-S.", "-B", build_dir])
-        subprocess.check_call(["cmake", "--build", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call(["cmake", "-S", source_dir, "-B", build_dir])
+            subprocess.check_call(["cmake", "--build", build_dir])
         # print(f"CMake project built successfully in {build_dir}.")
     except subprocess.CalledProcessError as e:
         print(f"Failed to build CMake project in {build_dir}: {e}")
@@ -78,8 +108,8 @@ def process_config_and_build(numbers, build_dir_index):
     更新config.h文件，并为每组数字构建项目，输出到一个独立的build文件夹。
     """
     build_dir = f"./build/build_{build_dir_index}"  # 为每次构建创建独立的构建目录
-    update_config(numbers)  # 更新config.h
-    build_cmake_project(build_dir)  # 构建项目
+    update_config(numbers, build_dir_index)  # 更新config.h文件
+    build_cmake_project(build_dir_index)  # 构建项目
     return build_dir
 
 
@@ -108,13 +138,16 @@ class myProblem(Problem):
         build_directories = []
         
         # compile for each row of x
-        for i in tqdm(range(pop_size), desc="Building projects"):
-            build_dir = process_config_and_build(x[i], i)
-            build_directories.append(build_dir)
+        # for i in tqdm(range(pop_size), desc="Building projects"):
+        #     build_dir = process_config_and_build(x[i], i)
+        #     build_directories.append(build_dir)
 
-        # clear the last line of console, which is the progress bar
-        print("\033[F\033[K", end="")
-  
+        # parallel version
+        tasks = [(x[i], i) for i in range(pop_size)]
+        build_directories = self.pool.starmap(process_config_and_build, tasks)
+
+
+ 
 
         # run the compiled programs in parallel
         executable_paths = [os.path.join(dir, "QuMMSE") for dir in build_directories]
@@ -123,7 +156,12 @@ class myProblem(Problem):
 
     
         for i in range(pop_size):
-            g[i]= results[i]-13000
+ 
+            if results[i] is None:
+                g[i] = 1
+            else:
+                g[i] = results[i]-13000
+
             f[i] = np.sum(x[i])
         
         out["F"] = f
@@ -160,10 +198,13 @@ if __name__ == "__main__":
     myPro = myProblem()
     print("The problem has been initialized!")
 
-    pop_size = 10
+    pop_size = 32
     n_gen = 1000
-
+    
+ 
     good_init = np.random.randint(9, 12, (pop_size, 30))
+
+    create_cmake_projects_copies(pop_size)
 
     algorithm = NSGA2(
         pop_size=pop_size,
