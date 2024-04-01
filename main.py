@@ -51,10 +51,10 @@ def build_cmake_project(build_dir, silence_output=True):
         os.makedirs(build_dir, exist_ok=True)
         # 将输出重定向到subprocess.DEVNULL，以避免在命令行中显示
         if silence_output:
-            subprocess.check_call(["cmake", "-S.", "-B", build_dir, "-DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++", "-DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call(["cmake", "-S.", "-B", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.check_call(["cmake", "--build", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            subprocess.check_call(["cmake", "-S.", "-B", build_dir, "-DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++", "-DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang"])
+            subprocess.check_call(["cmake", "-S.", "-B", build_dir])
         subprocess.check_call(["cmake", "--build", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         # print(f"CMake project built successfully in {build_dir}.")
     except subprocess.CalledProcessError as e:
@@ -82,18 +82,7 @@ def process_config_and_build(numbers, build_dir_index):
     build_cmake_project(build_dir)  # 构建项目
     return build_dir
 
-def parallel_execution(build_directories, iter, SNRdB):
-    """
-    并行运行所有构建好的C++程序。
-    """
-    executable_paths = [os.path.join(dir, "QuMMSE") for dir in build_directories]  # 替换your_executable_name
-    with Pool(processes=len(executable_paths)) as pool:
-        tasks = [(path, iter, SNRdB) for path in executable_paths]
-        results = pool.starmap(run_cpp_program, tasks)
-    return results
 
-
- 
 
 
 class myProblem(Problem):
@@ -128,11 +117,13 @@ class myProblem(Problem):
   
 
         # run the compiled programs in parallel
-        results = parallel_execution(build_directories, 1000, 10)
+        executable_paths = [os.path.join(dir, "QuMMSE") for dir in build_directories]
+        tasks = [(path, 10000, 10) for path in executable_paths]
+        results = self.pool.starmap(run_cpp_program, tasks)
 
     
         for i in range(pop_size):
-            g[i]= results[i]-1300
+            g[i]= results[i]-13000
             f[i] = np.sum(x[i])
         
         out["F"] = f
@@ -169,7 +160,7 @@ if __name__ == "__main__":
     myPro = myProblem()
     print("The problem has been initialized!")
 
-    pop_size = 8
+    pop_size = 10
     n_gen = 1000
 
     good_init = np.random.randint(9, 12, (pop_size, 30))
