@@ -50,8 +50,8 @@ def update_config(numbers, build_dir_index):
     仅在原地更新./include中的config.h文件。
     """
     config_file_path = f"./subCMake/subCMake_{build_dir_index}/include/config.h"
-    if len(numbers) != 30:
-        print("Error: Expected 30 numbers.")
+    if len(numbers) != 56:
+        print("Error: Expected 56 numbers.")
         return
     
     with open(config_file_path, "r") as file:
@@ -118,10 +118,10 @@ def process_config_and_build(numbers, build_dir_index):
 class myProblem(Problem):
     def __init__(self):
         super().__init__(
-            n_var= 30,
+            n_var= 56,
             n_obj=1,
             n_constr=1,
-            xl=3, 
+            xl=0, 
             xu=12,
             vtype=int,
         )
@@ -132,7 +132,6 @@ class myProblem(Problem):
         f = np.zeros((pop_size, 1))
         g = np.zeros((pop_size, 1))
 
-        # x is np.array(pop_size, 30)
 
         # clear build directories
         build_directories = []
@@ -202,7 +201,7 @@ if __name__ == "__main__":
     n_gen = 1000
     
  
-    good_init = np.random.randint(9, 12, (pop_size, 30))
+    good_init = np.random.randint(9, 12, (pop_size, 56))
 
     create_cmake_projects_copies(pop_size)
 

@@ -12,17 +12,16 @@ static constexpr int ModType = 4;
 class MMSE
 {
 public:
-    apFixedVec<RxSymbol_t, 2 * RxAntNum> RxSymbols;
-    apFixedMat<H_t, 2 * RxAntNum, 2 * TxAntNum> H;
-    Nv_t Nv;
+    Qu<dim<2 * RxAntNum>, RxSymbol_t> RxSymbols;
+    Qu<dim<2 * RxAntNum, 2 * TxAntNum>, H_t> H;
+    Qu<Nv_t> Nv;
 
-    apFixedMat<HtH_t, 2 * TxAntNum, 2 * TxAntNum> HtH;
-    apFixedVec<HtY_t, 2 * TxAntNum> HtY;
+    Qu<dim<2 * TxAntNum, 2 * TxAntNum>, HtH_t> HtH;
+    Qu<dim<2 * TxAntNum>, HtY_t> HtY;
 
     std::array<double, TxAntNum * 2> TxSymbolsNoQuant;
     std::array<double, RxAntNum * 2> RxSymbolsNoQuant;
     std::array<std::array<double, TxAntNum * 2>, RxAntNum * 2> HNoQuant;
-    std::array<size_t, TxAntNum * 2> pivot;
 
     std::array<int, TxAntNum * ModType> info;
 
@@ -66,8 +65,6 @@ public:
             }
         }
 
-
-
         // generate H
         double randomTemp;
         for (int r = 0; r < RxAntNum; r++)
@@ -75,14 +72,14 @@ public:
             for (int t = 0; t < TxAntNum; t++)
             {
                 randomTemp = randomGaussian_divSqrt2();
-                H[r][t] = randomTemp;
-                H[r + RxAntNum][t + TxAntNum] = randomTemp;
+                H[r, t] = randomTemp;
+                H[r + RxAntNum, t + TxAntNum] = randomTemp;
                 HNoQuant[r][t] = randomTemp;
                 HNoQuant[r + RxAntNum][t + TxAntNum] = randomTemp;
 
                 randomTemp = randomGaussian_divSqrt2();
-                H[r][t + TxAntNum] = randomTemp;
-                H[r + RxAntNum][t] = -randomTemp;
+                H[r, t + TxAntNum] = randomTemp;
+                H[r + RxAntNum, t] = -randomTemp;
                 HNoQuant[r][t + TxAntNum] = randomTemp;
                 HNoQuant[r + RxAntNum][t] = -randomTemp;
             }
@@ -103,25 +100,26 @@ public:
         }
 
         // MMSE
-        Qgemul<QgemulAddArgs<QgemulAdd_t>, QgemulMulArgs<QgemulMul_t>>(HtH, H);
+        Qgemul<QgemulAddArgs<QgemulAddList>, QgemulMulArgs<QgemulMul_t>, QgemulTransposedA<true>>(HtH, H, H);
 
-        Qgemv<QgemvAddArgs<QgemvAdd_t>, QgemvMulArgs<QgemvMul_t>, QgemvTransposedA<true>>(HtY, H, RxSymbols);
+        Qgemv<QgemvAddArgs<QgemvAddList>, QgemvMulArgs<QgemvMul_t>, QgemvTransposedA<true>>(HtY, H, RxSymbols);
 
         for (int i = 0; i < 2 * TxAntNum; i++)
         {
-            HtH[i][i] = HtH[i][i] + Nv;
+            HtH[i, i] = HtH[i, i] + Nv;
         }
 
-        Qgetrf<QgetrfDivArgs<QgetrfDiv_t>,
-               QgetrfSubArgs<QgetrfSub_t>,
-               QgetrfMulArgs<QgetrfMul_t>>(HtH, pivot);
+        Qpotrf<QpotrfMulArgs<QpotrfMul_t>,
+               QpotrfSubArgs<QpotrfSub_t>,
+               QpotrfDivArgs<QpotrfDiv_t>>(HtH);
 
-        Qgetrs<QgetrsDivArgs<QgetrsDiv_t>,
-               QgetrsSubArgs<QgetrsSub_t>,
-               QgetrsMulArgs<QgetrsMul_t>>(HtH, pivot, HtY);
+        Qpotrs<QpotrsForwardMulArgs<QpotrsForwardMul_t>,
+               QpotrsForwardSubArgs<QpotrsForwardSub_t>,
+               QpotrsForwardDivArgs<QpotrsForwardDiv_t>,
+               QpotrsBackwardMulArgs<QpotrsBackwardMul_t>, QpotrsBackwardSubArgs<QpotrsBackwardSub_t>,
+               QpotrsBackwardDivArgs<QpotrsBackwardDiv_t>>(HtH, HtY);
 
-        auto res = HtY.output();
-
+        auto res = HtY.toDouble();
 
         const double *Cons;
         const int *bitCons;
