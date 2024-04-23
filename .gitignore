@@ -9,3 +9,6 @@ build/
 
 # ignore .cache
 .cache/
+
+# subCmake folder
+subCmake/

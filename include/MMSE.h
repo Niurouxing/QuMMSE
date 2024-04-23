@@ -14,10 +14,10 @@ class MMSE
 public:
     Qu<dim<2 * RxAntNum>, RxSymbol_t> RxSymbols;
     Qu<dim<2 * RxAntNum, 2 * TxAntNum>, H_t> H;
-    Qu<Nv_t> Nv;
+    Qu<intBits<0>, fracBits<10>> Nv;
 
-    Qu<dim<2 * TxAntNum, 2 * TxAntNum>, HtH_t> HtH;
-    Qu<dim<2 * TxAntNum>, HtY_t> HtY;
+    Qu<dim<2 * TxAntNum, 2 * TxAntNum>, L_t> L;
+    Qu<dim<2 * TxAntNum>, b_t> b;
 
     std::array<double, TxAntNum * 2> TxSymbolsNoQuant;
     std::array<double, RxAntNum * 2> RxSymbolsNoQuant;
@@ -100,26 +100,26 @@ public:
         }
 
         // MMSE
-        Qgemul<QgemulAddArgs<QgemulAddList>, QgemulMulArgs<QgemulMul_t>, QgemulTransposedA<true>>(HtH, H, H);
+        Qgemul<QgemulAddArgs<QgemulAddList>, QgemulMulArgs<QgemulMul_t>, QgemulTransposedA<true>>(L, H, H);
 
-        Qgemv<QgemvAddArgs<QgemvAddList>, QgemvMulArgs<QgemvMul_t>, QgemvTransposedA<true>>(HtY, H, RxSymbols);
+        Qgemv<QgemvAddArgs<QgemvAddList>, QgemvMulArgs<QgemvMul_t>, QgemvTransposedA<true>>(b, H, RxSymbols);
 
         for (int i = 0; i < 2 * TxAntNum; i++)
         {
-            HtH[i, i] = HtH[i, i] + Nv;
+            L[i, i] = L[i, i] + Nv;
         }
 
         Qpotrf<QpotrfMulArgs<QpotrfMul_t>,
                QpotrfSubArgs<QpotrfSub_t>,
-               QpotrfDivArgs<QpotrfDiv_t>>(HtH);
+               QpotrfDivArgs<QpotrfDiv_t>>(L);
 
         Qpotrs<QpotrsForwardMulArgs<QpotrsForwardMul_t>,
                QpotrsForwardSubArgs<QpotrsForwardSub_t>,
                QpotrsForwardDivArgs<QpotrsForwardDiv_t>,
                QpotrsBackwardMulArgs<QpotrsBackwardMul_t>, QpotrsBackwardSubArgs<QpotrsBackwardSub_t>,
-               QpotrsBackwardDivArgs<QpotrsBackwardDiv_t>>(HtH, HtY);
+               QpotrsBackwardDivArgs<QpotrsBackwardDiv_t>>(L, b);
 
-        auto res = HtY.toDouble();
+        auto res = b.toDouble();
 
         const double *Cons;
         const int *bitCons;

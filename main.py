@@ -50,16 +50,29 @@ def update_config(numbers, build_dir_index):
     仅在原地更新./include中的config.h文件。
     """
     config_file_path = f"./subCMake/subCMake_{build_dir_index}/include/config.h"
-    if len(numbers) != 56:
-        print("Error: Expected 56 numbers.")
+
+    if len(numbers) != 54:
+        print("Error: Expected 54 numbers.")
         return
     
+
+    # make array shape (27,2)
+    helpArray = np.array(numbers).reshape(27, 2)
+
+    # sum the two columns
+    helpArray  = np.sum(helpArray , axis=1)
+
+    # if any number is less than 0, set all numbers to integer 1
+    if np.any(helpArray  < 0):
+        numbers = np.ones(54, dtype=int)
+        
+
     with open(config_file_path, "r") as file:
         content = file.read()
-    
-    pattern = r"(intBits<|fracBits<)(\d+)>"
+
+    pattern = r"(intBits<|fracBits<)(-?\d+)>"
     current_index = 0
-    
+
     def replace_with_number(match):
         nonlocal current_index
         replacement_number = numbers[current_index]
@@ -118,10 +131,10 @@ def process_config_and_build(numbers, build_dir_index):
 class myProblem(Problem):
     def __init__(self):
         super().__init__(
-            n_var= 56,
-            n_obj=1,
+            n_var= 54,
+            n_obj=2,
             n_constr=1,
-            xl=0, 
+            xl=-8, 
             xu=12,
             vtype=int,
         )
@@ -129,7 +142,7 @@ class myProblem(Problem):
         self.pool = Pool(processes=os.cpu_count())
     def _evaluate(self, x, out, *args, **kwargs):
         pop_size = x.shape[0]
-        f = np.zeros((pop_size, 1))
+        f = np.zeros((pop_size, 2))
         g = np.zeros((pop_size, 1))
 
 
@@ -159,9 +172,10 @@ class myProblem(Problem):
             if results[i] is None:
                 g[i] = 1
             else:
-                g[i] = results[i]-13000
+                g[i] = results[i]-120000
 
-            f[i] = np.sum(x[i])
+            f[i][0] = np.sum(x[i])
+            f[i][1] = results[i]
         
         out["F"] = f
         out["G"] = g
@@ -180,16 +194,13 @@ class MyCallback(Callback):
 
     def notify(self, algorithm):
         self.log+=1
-        if self.log%10==0:
+        if self.log%5==0:
             currentArg = algorithm.pop.get("X")
             currentPer = algorithm.pop.get("F")
 
-            # find smallest errorBits in current population
-            minIndex = np.argmin(currentPer)
-            minErrorBits = currentPer[minIndex]
-            minArg = currentArg[minIndex]
-            print("Best :", minErrorBits)
-            print("minArg:", minArg)
+ 
+ 
+            print("minArg:", currentArg[0,:])
 
 
 
@@ -199,10 +210,10 @@ if __name__ == "__main__":
 
     pop_size = 32
     n_gen = 1000
-    
- 
-    good_init = np.random.randint(9, 12, (pop_size, 56))
 
+
+ 
+    good_init =  np.array([[3, 3, 0, 8, 5, 8, 6, 6, 1, 9, 2, 5, 3, 4, 4, 4, 5, 3, 6, 1, 0, 9, 4, 5, 4, 3, 5, 3, 5, 2, 6, 1, 6, 1, 4, 4, -2, 2, 5, 2, 3, 4, 2, 1, 6, 2, 4, 3, 1, 5, 4, 5, 0, 5]])
     create_cmake_projects_copies(pop_size)
 
     algorithm = NSGA2(

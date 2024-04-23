@@ -7,8 +7,8 @@
 
 int main(int argc, char *argv[])
 {
-    int iter = 10000;
-    double SNRdB = 20;
+    int iter = 100000;
+    double SNRdB = 10;
     if (argc >= 3)
     {
         iter = std::atoi(argv[1]);
