@@ -11,4 +11,4 @@ build/
 .cache/
 
 # subCmake folder
-subCmake/
+subCMake/
