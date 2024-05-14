@@ -4,6 +4,7 @@
 #include "QuBLAS.h"
 #include "config.h"
 #include "utils.h"
+#include <cstddef>
 
 static constexpr int TxAntNum = 16;
 static constexpr int RxAntNum = 32;
@@ -14,10 +15,12 @@ class MMSE
 public:
     Qu<dim<2 * RxAntNum>, RxSymbol_t> RxSymbols;
     Qu<dim<2 * RxAntNum, 2 * TxAntNum>, H_t> H;
-    Qu<intBits<0>, fracBits<10>> Nv;
+    Qu<Nv_t> Nv;
 
-    Qu<dim<2 * TxAntNum, 2 * TxAntNum>, L_t> L;
-    Qu<dim<2 * TxAntNum>, b_t> b;
+    // Qu<dim<2 * TxAntNum, 2 * TxAntNum>, HtH_t> HtH;
+    using HtH_t = GramMatrix<2 * TxAntNum, HtH_diag_t, HtH_off_diag_t>;
+    HtH_t HtH;
+    Qu<dim<2 * TxAntNum>, HtY_t> HtY;
 
     std::array<double, TxAntNum * 2> TxSymbolsNoQuant;
     std::array<double, RxAntNum * 2> RxSymbolsNoQuant;
@@ -100,26 +103,24 @@ public:
         }
 
         // MMSE
-        Qgemul<QgemulAddArgs<QgemulAddList>, QgemulMulArgs<QgemulMul_t>, QgemulTransposedA<true>>(L, H, H);
+        Qgramul<QgramulDiagAddArgs<QgramulAddDiagList>, QgramulOffDiagAddArgs<QgramulAddOffDiagList>, QgramulDiagMulArgs<QgemulDiagMul_t>, QgramulOffDiagMulArgs<QgemulOffDiagMul_t>>(HtH, H);
 
-        Qgemv<QgemvAddArgs<QgemvAddList>, QgemvMulArgs<QgemvMul_t>, QgemvTransposedA<true>>(b, H, RxSymbols);
+        Qgemv<QgemvAddArgs<QgemvAddList>, QgemvMulArgs<QgemvMul_t>, QgemvTransposedA<true>>(HtY, H, RxSymbols);
 
-        for (int i = 0; i < 2 * TxAntNum; i++)
-        {
-            L[i, i] = L[i, i] + Nv;
-        }
+        // for (int i = 0; i < 2 * TxAntNum; i++)
+        // {
+        //     HtH[i, i] = HtH[i, i] + Nv;
+        // }
 
-        Qpotrf<QpotrfMulArgs<QpotrfMul_t>,
-               QpotrfSubArgs<QpotrfSub_t>,
-               QpotrfDivArgs<QpotrfDiv_t>>(L);
+        [&Nv = Nv, &HtH = HtH]<size_t... I>(std::index_sequence<I...>) {
+            ((HtH.get<I, I>() = HtH.get<I, I>() + Nv), ...);
+        }(std::make_index_sequence<2 * TxAntNum>());
 
-        Qpotrs<QpotrsForwardMulArgs<QpotrsForwardMul_t>,
-               QpotrsForwardSubArgs<QpotrsForwardSub_t>,
-               QpotrsForwardDivArgs<QpotrsForwardDiv_t>,
-               QpotrsBackwardMulArgs<QpotrsBackwardMul_t>, QpotrsBackwardSubArgs<QpotrsBackwardSub_t>,
-               QpotrsBackwardDivArgs<QpotrsBackwardDiv_t>>(L, b);
+        Qpotrf(HtH);
 
-        auto res = b.toDouble();
+        Qpotrs(HtH, HtY);
+
+        auto res = HtY.toDouble();
 
         const double *Cons;
         const int *bitCons;

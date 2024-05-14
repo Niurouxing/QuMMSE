@@ -9,6 +9,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
 
+# -fbracket-depth
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fbracket-depth=2048")
+
 add_subdirectory(QuBLAS)
 
 # include .h files in ./include directory
