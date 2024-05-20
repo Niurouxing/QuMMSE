@@ -7,7 +7,7 @@
 
 int main(int argc, char *argv[])
 {
-    int iter = 100000;
+    int iter = 10000;
     double SNRdB = 10;
     if (argc >= 3)
     {

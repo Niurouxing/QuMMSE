@@ -15,10 +15,11 @@ class MMSE
 public:
     Qu<dim<2 * RxAntNum>, RxSymbol_t> RxSymbols;
     Qu<dim<2 * RxAntNum, 2 * TxAntNum>, H_t> H;
-    Qu<Nv_t> Nv;
+    Qu<HtH_diag_t> Nv;
 
     // Qu<dim<2 * TxAntNum, 2 * TxAntNum>, HtH_t> HtH;
-    using HtH_t = GramMatrix<2 * TxAntNum, HtH_diag_t, HtH_off_diag_t>;
+    using HtH_t = Qu<dim<2 * TxAntNum, 2 * TxAntNum>, Gram<HtH_diag_t, HtH_off_diag_t>>;
+    // using HtH_t = Qu<dim<2 * TxAntNum, 2 * TxAntNum>, HtH_diag_t>;
     HtH_t HtH;
     Qu<dim<2 * TxAntNum>, HtY_t> HtY;
 
@@ -74,13 +75,13 @@ public:
         {
             for (int t = 0; t < TxAntNum; t++)
             {
-                randomTemp = randomGaussian_divSqrt2();
+                randomTemp = randomGaussian() * std::sqrt(1.0 / 2);
                 H[r, t] = randomTemp;
                 H[r + RxAntNum, t + TxAntNum] = randomTemp;
                 HNoQuant[r][t] = randomTemp;
                 HNoQuant[r + RxAntNum][t + TxAntNum] = randomTemp;
 
-                randomTemp = randomGaussian_divSqrt2();
+                randomTemp = randomGaussian() * std::sqrt(1.0 / 2);
                 H[r, t + TxAntNum] = randomTemp;
                 H[r + RxAntNum, t] = -randomTemp;
                 HNoQuant[r][t + TxAntNum] = randomTemp;
@@ -101,6 +102,12 @@ public:
 
             RxSymbols[r] = RxSymbolsNoQuant[r];
         }
+
+
+        // for (int i = 0; i < RxAntNum * 2; i++)
+        // {
+        //     std::cout << RxSymbolsNoQuant[i] << " ";
+        // }
 
         // MMSE
         Qgramul<QgramulDiagAddArgs<QgramulAddDiagList>, QgramulOffDiagAddArgs<QgramulAddOffDiagList>, QgramulDiagMulArgs<QgemulDiagMul_t>, QgramulOffDiagMulArgs<QgemulOffDiagMul_t>>(HtH, H);

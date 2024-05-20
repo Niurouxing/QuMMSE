@@ -51,20 +51,20 @@ def update_config(numbers, build_dir_index):
     """
     config_file_path = f"./subCMake/subCMake_{build_dir_index}/include/config.h"
 
-    if len(numbers) != 54:
-        print("Error: Expected 54 numbers.")
+    if len(numbers) != 52:
+        print("Error: Expected 52 numbers.")
         return
     
 
-    # make array shape (27,2)
-    helpArray = np.array(numbers).reshape(27, 2)
+    # make array shape (26,2)
+    helpArray = np.array(numbers).reshape(26, 2)
 
     # sum the two columns
     helpArray  = np.sum(helpArray , axis=1)
 
     # if any number is less than 0, set all numbers to integer 1
     if np.any(helpArray  < 0):
-        numbers = np.ones(54, dtype=int)
+        numbers = np.ones(52, dtype=int)
         
 
     with open(config_file_path, "r") as file:
@@ -87,19 +87,35 @@ def update_config(numbers, build_dir_index):
     with open(config_file_path, "w") as file:
         file.write(updated_content)
 
-def build_cmake_project(build_dir_index, silence_output=True):
+def build_cmake_project(build_dir_index, silence_output=True, use_clang=True):
     build_dir = f"./build/build_{build_dir_index}"
     source_dir = f"./subCMake/subCMake_{build_dir_index}"
     os.makedirs(build_dir, exist_ok=True)
+    
+    # 定义 CMake 命令的一般部分
+    cmake_configure_command = [
+        "cmake", "-S", source_dir, "-B", build_dir
+    ]
+    cmake_build_command = [
+        "cmake", "--build", build_dir
+    ]
+    
+    # 如果指定使用 clang 编译器
+    if use_clang:
+        clang_options = [
+            "-DCMAKE_C_COMPILER=/usr/bin/clang",
+            "-DCMAKE_CXX_COMPILER=/usr/bin/clang++"
+        ]
+        cmake_configure_command.extend(clang_options)
+
+    # 控制输出
+    output_options = {}
+    if silence_output:
+        output_options = {'stdout': subprocess.DEVNULL, 'stderr': subprocess.DEVNULL}
+    
     try:
-        # 注意这里的改变，我们现在使用`source_dir`作为源目录
-        if silence_output:
-            subprocess.check_call(["cmake", "-S", source_dir, "-B", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.check_call(["cmake", "--build", build_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            subprocess.check_call(["cmake", "-S", source_dir, "-B", build_dir])
-            subprocess.check_call(["cmake", "--build", build_dir])
-        # print(f"CMake project built successfully in {build_dir}.")
+        subprocess.check_call(cmake_configure_command, **output_options)
+        subprocess.check_call(cmake_build_command, **output_options)
     except subprocess.CalledProcessError as e:
         print(f"Failed to build CMake project in {build_dir}: {e}")
 
@@ -131,8 +147,8 @@ def process_config_and_build(numbers, build_dir_index):
 class myProblem(Problem):
     def __init__(self):
         super().__init__(
-            n_var= 54,
-            n_obj=2,
+            n_var= 52,
+            n_obj=1,
             n_constr=1,
             xl=-8, 
             xu=12,
@@ -142,7 +158,7 @@ class myProblem(Problem):
         self.pool = Pool(processes=os.cpu_count())
     def _evaluate(self, x, out, *args, **kwargs):
         pop_size = x.shape[0]
-        f = np.zeros((pop_size, 2))
+        f = np.zeros((pop_size, 1))
         g = np.zeros((pop_size, 1))
 
 
@@ -163,7 +179,7 @@ class myProblem(Problem):
 
         # run the compiled programs in parallel
         executable_paths = [os.path.join(dir, "QuMMSE") for dir in build_directories]
-        tasks = [(path, 10000, 10) for path in executable_paths]
+        tasks = [(path, 30000, 10) for path in executable_paths]
         results = self.pool.starmap(run_cpp_program, tasks)
 
     
@@ -172,10 +188,10 @@ class myProblem(Problem):
             if results[i] is None:
                 g[i] = 1
             else:
-                g[i] = results[i]-120000
+                g[i] = results[i]-36000
 
             f[i][0] = np.sum(x[i])
-            f[i][1] = results[i]
+            # f[i][1] = results[i]
         
         out["F"] = f
         out["G"] = g
@@ -211,9 +227,16 @@ if __name__ == "__main__":
     pop_size = 32
     n_gen = 1000
 
-
+# 6  9  2  5  6 10  5  6  7  6  3  9  3  8  3  6  3  7  4  7  6  6  3 10
+#   4  5  4  5  4  5  5  4  6  4  6  2  3  7  6  8  5  5  6  6  6  5  6  4
+#   7  4  6  9
  
-    good_init =  np.array([[3, 3, 0, 8, 5, 8, 6, 6, 1, 6, 2, 5, 3, 4, 4, 4, 5, 3, 6, 1, 0, 6, 4, 5, 4, 3, 5, 3, 5, 2, 6, 1, 6, 1, 4, 4, -2, 2, 5, 2, 3, 4, 2, 1, 6, 2, 4, 3, 1, 5, 4, 5, 0, 5]])
+    good_init =  np.array([6, 9, 2, 5, 6, 10, 5, 6, 7, 6, 3, 9, 3, 8, 3, 6, 3, 7, 4, 7, 6, 6, 3, 10,
+                            4, 5, 4, 5, 4, 5, 5, 4, 6, 4, 6, 2, 3, 7, 6, 8, 5, 5, 6, 6, 6, 5, 6, 4,
+                            7, 4, 6, 9])
+
+
+
     create_cmake_projects_copies(pop_size)
 
     algorithm = NSGA2(
