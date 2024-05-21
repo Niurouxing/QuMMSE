@@ -16,10 +16,13 @@ from tqdm import tqdm
 
 
 
+ 
+# targetBER= np.array([0.0175691022482291, 0.00956309398099261, 0.00502626441056155, 0.00228790429146741, 0.000911072694097736, 0.000290468750000000])
+targetBER= np.array([0.0175691022482291, 0.00956309398099261, 0.00502626441056155, 0.00228790429146741, 0.000991072694097736, 0.000690468750000000])
 
+SNRList = np.array([10, 11, 12, 13, 14, 15])
 
-
-
+sample = 10000
 
 
 def create_cmake_projects_copies(num_copies):
@@ -149,7 +152,7 @@ class myProblem(Problem):
         super().__init__(
             n_var= 52,
             n_obj=1,
-            n_constr=1,
+            n_constr=6,
             xl=-8, 
             xu=12,
             vtype=int,
@@ -159,7 +162,7 @@ class myProblem(Problem):
     def _evaluate(self, x, out, *args, **kwargs):
         pop_size = x.shape[0]
         f = np.zeros((pop_size, 1))
-        g = np.zeros((pop_size, 1))
+        g = np.zeros((pop_size, 6))
 
 
         # clear build directories
@@ -177,21 +180,26 @@ class myProblem(Problem):
 
  
 
-        # run the compiled programs in parallel
+        # run the compiled programs in parallel for each SNR
         executable_paths = [os.path.join(dir, "QuMMSE") for dir in build_directories]
-        tasks = [(path, 30000, 10) for path in executable_paths]
-        results = self.pool.starmap(run_cpp_program, tasks)
+        # tasks = [(path, 30000, 10) for path in executable_paths]
+        # results = self.pool.starmap(run_cpp_program, tasks)
 
     
-        for i in range(pop_size):
+        for i in range(SNRList.shape[0]):
+            tasks = [(path, sample, SNRList[i]) for path in executable_paths]
+            results = self.pool.starmap(run_cpp_program, tasks)
+            for j in range(pop_size):
+                if results[j] is None:
+                    g[j][i] = 1
+                else:
+                    g[j][i] = results[j]-sample * targetBER[i] * 16 * 4 * 1.5
+                    # f[j][1] += results[j]
  
-            if results[i] is None:
-                g[i] = 1
-            else:
-                g[i] = results[i]-36000
-
+        for i in range(pop_size):
             f[i][0] = np.sum(x[i])
-            # f[i][1] = results[i]
+
+
         
         out["F"] = f
         out["G"] = g
@@ -210,13 +218,26 @@ class MyCallback(Callback):
 
     def notify(self, algorithm):
         self.log+=1
-        if self.log%5==0:
-            currentArg = algorithm.pop.get("X")
-            currentPer = algorithm.pop.get("F")
+        # if self.log%5==0:
+        currentArg = algorithm.pop.get("X")
+        currentPer = algorithm.pop.get("F")
+        currentG = algorithm.pop.get("G")
+
+        # sum and keep the dimension
+        currentG = np.sum(currentG, axis=1).reshape(-1,1) + np.sum(targetBER) * sample * 16 * 4 * 1.5 
 
  
+        toprint = np.concatenate((currentArg, currentPer,currentG), axis=1)
+
+        # save the currentArg and currentPer to the end of file data.txt
+        with open("data.txt", "a") as f:
+            np.savetxt(f, toprint, fmt="%d")
+
  
-            print("minArg:", currentArg[0,:])
+
+
+
+        print("minArg:", currentArg[0,:])
 
 
 
@@ -227,14 +248,15 @@ if __name__ == "__main__":
     pop_size = 32
     n_gen = 1000
 
-# 6  9  2  5  6 10  5  6  7  6  3  9  3  8  3  6  3  7  4  7  6  6  3 10
-#   4  5  4  5  4  5  5  4  6  4  6  2  3  7  6  8  5  5  6  6  6  5  6  4
-#   7  4  6  9
+#  5 10  3  6  7 11  5 10  7 10  3 12  3 11  5 11  4 10  4 11  5 10  4 12
+#   4  6  4  6  5  6  7  5  7  5 10  5  4 11  6 10  6  9  6 11  6  8  7 10
+#   8  6  5 10
  
-    good_init =  np.array([6, 9, 2, 5, 6, 10, 5, 6, 7, 6, 3, 9, 3, 8, 3, 6, 3, 7, 4, 7, 6, 6, 3, 10,
-                            4, 5, 4, 5, 4, 5, 5, 4, 6, 4, 6, 2, 3, 7, 6, 8, 5, 5, 6, 6, 6, 5, 6, 4,
-                            7, 4, 6, 9])
-
+# 5  8  2  5  6  8  7  8  7  8  3  9  3  9  3  8  3  7  4  6  5  7  3 11
+#   3  6  4  5  4  5  5  3  6  3  6  3  3  7  5  9  5  8  7  7  6  5  6  7
+#   7  3  5  8
+ 
+    good_init =  np.random.randint(8, 12, (pop_size, 52))
 
 
     create_cmake_projects_copies(pop_size)
